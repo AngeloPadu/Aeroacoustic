@@ -1,0 +1,16 @@
+# Direct Recorded Script
+# PowerVIZ 6-2021-R2 ( PowerVIZ 5.13.2 )
+# Date: Wed Mar 15 11:20:52 2023
+
+
+project1=app.newProject(CDIFilename="./ac-NASA_UFSC-V14_1-M0-NoSlip_NoSlip_run_medium.cdi", fluidFilename="./seed-145db-1400-upstream.fnc", exportAnalysisCaseObject="", exportSimulationObject="", name="Project1", variablesToLoad=["Velocity Magnitude","X-Velocity","Y-Velocity","Z-Velocity","Static Pressure","Density","Temperature","Total Pressure","Total Temperature"])
+fluidPoint1=project1.new(type="FluidPoint")
+fluidPoint1.position=( (0, -0.02, 0.006223), "m")
+fluidPoint1.lineActivate=True
+scalarPropertySet5=project1.get(name="Static Pressure", type="ScalarPropertySet")
+fluidPoint1.lineSPS=scalarPropertySet5
+fluidPoint1.orientationMode="X-Aligned"
+fluidPoint1.lineLength=(15.66573, "m")
+xYGraph1=fluidPoint1.lineGraph
+xYGraph1.exportToCSV(filename="./pressure_along_channel.csv", onlyVisible=False)
+# sign=X31VuWjHoevR6W2VFTlyhgFBAlqAf62ujbvZq1QBUxStkjGXipW3RZ8YIMqfEyFdFZK8oHTSiEk17+IDHkQOoh9FFFegzJaTNipsjqqSZgOX486uwKVcMDRIQ+CcKy6Qlx5zWUq7up8qBRYWZJmE5/A61XDcHafHolJ5QZsxiZs=

@@ -1,0 +1,152 @@
+# Direct Recorded Script
+# PowerVIZ 6-2021-R2 ( PowerVIZ 5.13.2 )
+# Date: Thu Feb 23 10:16:56 2023
+
+
+project1=app.newProject(CDIFilename="./ac-NASA_UFSC-V16_2chW-M0.3-NoSlip_NoSlip_run_fine.cdi", 
+fluidFilename="./ac_plane1_stream_inst_avg.snc", exportAnalysisCaseObject="", 
+exportSimulationObject="", name="Project1", variablesToLoad=["Velocity Magnitude","X-Velocity",
+"Y-Velocity","Z-Velocity","Static Pressure","Density"])
+
+t0 = project1.nextTimeFrameSteps
+tf = project1.endTimeFrameSteps
+n_ts = project1.numberTimeFrames
+
+viewerBackground3=project1.get(name="ViewerBackground3", type="ViewerBackground")
+viewerBackground3.color="#c0c0c0"
+viewer1=project1.getViewer(0)
+camera1=viewer1.camera
+coordSystem1=project1.get(name="default_csys", type="CoordSystem")
+
+# FIRST CAVITY
+#camera1.setView(position=(0.006223, 0.0002, 0.006223), viewDirection=(0, 0, -1), upDirection=(0, 1, 0), coordinateSystem=coordSystem1, positionUnits="m", projectionType="Orthographic", orthographicFieldOfView=14.2409, perspectiveFieldOfView=0.6)
+#camera1.spinCenter=( (0.006223, 0.0002, 0.004241652), "m")
+
+# SIXTH CAVITY
+#camera1.setView(position=(0.068453, 0.0002, 0.006223), viewDirection=(0, 0, -1), upDirection=(0, 1, 0), coordinateSystem=coordSystem1, positionUnits="m", projectionType="Orthographic", orthographicFieldOfView=14.2409, perspectiveFieldOfView=0.6)
+#camera1.spinCenter=( (0.068453, 0.0002, 0.004241652), "m")
+
+# ELEVENTH CAVITY
+camera1.setView(position=(0.130683, 0.0002, 0.006223), viewDirection=(0, 0, -1), upDirection=(0, 1, 0), coordinateSystem=coordSystem1, positionUnits="m", projectionType="Orthographic", orthographicFieldOfView=14.2409, perspectiveFieldOfView=0.6)
+camera1.spinCenter=( (0.130683, 0.0002, 0.004241652), "m")
+
+camera1.orthographicFieldOfView=(0.007, "m")
+standardPartition1=project1.get(name="Standard", type="StandardPartition")
+modelView1=standardPartition1.defaultModelView
+modelViewObject136=modelView1.get(name="Liner_Part", type="ModelViewObject")
+modelViewObject136.displayMode="Outline"
+modelViewObject141=modelView1.get(name="plane1_stream_Part", type="ModelViewObject")
+modelViewObject141.imageShow="On"
+modelViewObject141.streamlineShow="On"
+scalarPropertySet2=project1.get(name="Y-Velocity", type="ScalarPropertySet")
+colorMap5=project1.get(name="Divergence Red-Blue", type="ColorMap")
+scalarPropertySet2.colorMap=colorMap5
+cropBox1=project1.new(type="CropBox")
+
+# FIRST CAVITY
+#cropBox1.position=( (0.006223, 0.0005, 0.006223), "m")
+
+# SIXTH CAVITY
+#cropBox1.position=( (0.068453, 0.0005, 0.006223), "m")
+
+# ELEVENTH CAVITY
+cropBox1.position=( (0.130683, 0.0005, 0.006223), "m")
+
+#cropBox1.size=( (0.012446, 0.006, 0), "m")
+#cropBox1.size=( (0.150, 0.006, 0), "m")
+#cropBox1.visibility="Hide Bounding Box"
+#project1.cropSurface(cropBox=cropBox1)
+surfaceImage1=project1.get(name="Surface Image", type="SurfaceImage")
+surfaceImage1.scalarPropertySet=scalarPropertySet2
+scalarPropertySet2.range=( (-5, 5), "m/sec")
+surfaceImage1.complexity="Surfel"
+surfaceStreamlines1=project1.get(name="Surface Streamlines", type="SurfaceStreamlines")
+surfaceStreamlines1.number=10000
+surfaceStreamlines1.color="#000000"
+surfaceStreamlines1.arrowStyle="Filled"
+surfaceStreamlines1.arrowLengthScale=1
+surfaceStreamlines1.arrowSize=(0.0001, "m")
+surfaceStreamlines1.surfaceDist=(1e-20, "m")
+surfaceStreamlines1.calculate()
+timeAnimation1=project1.timeAnimation
+legend1=project1.newLegend()
+legend1.scalarPropertySet=scalarPropertySet2
+legend1.orientation="Horizontal"
+legend1.position=(0, -0.49)
+legend1.significantFigures=1
+legend1.increment=(2.5, "m/sec")
+legend1.font=["Noto Sans",14,50,0]
+
+surfaceGraph1=project1.new(type="SurfaceGraph")
+surfaceGraph1.orientationMode="Y-Aligned"
+surfaceGraph1.scalarPropertySet=scalarPropertySet2
+
+surfaceGraph2=project1.new(type="SurfaceGraph")
+surfaceGraph2.orientationMode="Y-Aligned"
+surfaceGraph2.scalarPropertySet=scalarPropertySet2
+
+# FIRST CAVITY
+surfaceGraph1.position=( (0.005, 0.0003175, 0.006223), "m")
+
+# SIXTH CAVITY
+#surfaceGraph1.position=( (0.06723, 0.0003175, 0.006223), "m")
+
+# ELEVENTH CAVITY
+surfaceGraph2.position=( (0.12946, 0.0003175, 0.006223), "m")
+
+surfaceGraph1.size=( (0.0015, 0.0015, 2.430859e-05), "m")
+surfaceGraph1.upDownClassificationEnabled=False
+onScreenGraph1=surfaceGraph1.onScreenGraph
+onScreenGraph1.yAxisRange=( (-2, 2), "m/sec")
+onScreenGraph1.y2AxisRange=(-2, 2)
+surfaceGraph1.visibility="Hide Bounding Box"
+surfaceGraph1.cutPointShow=False
+
+surfaceGraph2.size=( (0.0015, 0.0015, 2.430859e-05), "m")
+surfaceGraph2.upDownClassificationEnabled=False
+onScreenGraph2=surfaceGraph1.onScreenGraph
+onScreenGraph2.yAxisRange=( (-2, 2), "m/sec")
+onScreenGraph2.y2AxisRange=(-2, 2)
+surfaceGraph2.visibility="Hide Bounding Box"
+surfaceGraph2.cutPointShow=False
+
+import numpy as np
+ts = int((tf-t0)/n_ts)
+project1.timeStep=t0
+timeAnimation1.timestep=t0
+i = 0 
+
+while project1.currentTimeFrame != n_ts-1:
+	
+	surfaceStreamlines1.reset()
+	surfaceStreamlines1.calculate()
+	#camera1.saveImage(filename="./phaselock_image/image{}.png".format(i))
+
+	xYGraph1=surfaceGraph1.calculate()
+	graphAxis1=xYGraph1.xAxis
+	graphAxis1.unit=["Length","m"]
+	graphAxis2=xYGraph1.y1Axis
+	graphAxis2.unit=["Velocity","m/sec"]
+	graphAxis1.minimum=(0, "m")
+	graphAxis1.maximum=(1, "m")
+	graphAxis2.minimum=(0, "m/sec")
+	graphAxis2.maximum=(1, "m/sec")
+	xYGraph1.exportToCSV(filename="./phaselock_velocity/first{}.csv".format(i), onlyVisible=False)
+
+	xYGraph2=surfaceGraph2.calculate()
+	graphAxis1=xYGraph2.xAxis
+	graphAxis1.unit=["Length","m"]
+	graphAxis2=xYGraph1.y1Axis
+	graphAxis2.unit=["Velocity","m/sec"]
+	graphAxis1.minimum=(0, "m")
+	graphAxis1.maximum=(1, "m")
+	graphAxis2.minimum=(0, "m/sec")
+	graphAxis2.maximum=(1, "m/sec")
+	#xYGraph2.exportToCSV(filename="./last_cavity/last{}.csv".format(i), onlyVisible=False)
+
+	i += 1
+	prev_ts = project1.timeStep
+	project1.timeStep=prev_ts+ts
+	timeAnimation1.timestep=prev_ts+ts
+
+# sign=jBM3jNyNOZb9od1VDHLTA7Jzp7OA/gfyaQYLYJj4uUk5mVkCSXPZG7EeTwgwsnfMj4DSNBYZDFWNXwrpLJl90n3p+VDHLjOv2+FvhDys6iUlTQo9iJBvbNZqlWWPf+NSUGDAU8qX2vuVsaZneBqRDKQyGuh6wr0WqO/rFrvIgT8=

@@ -1,0 +1,28 @@
+# Direct Recorded Script
+# PowerVIZ 6-2021-R2 ( PowerVIZ 5.13.2 )
+# Date: Tue Mar 14 12:33:12 2023
+
+
+project1=app.newProject(CDIFilename="./NASA_UFSC-V14_2chW-M0.3-Slip_NoSlip_run_fine.cdi", fluidFilename="./NASA_UFSC-V14_2chW-M0.3-Slip_NoSlip_run_fine.ckpt.fnc", exportAnalysisCaseObject="", exportSimulationObject="", name="Project1", variablesToLoad=["Velocity Magnitude","X-Velocity","Y-Velocity","Z-Velocity","Static Pressure","Density"])
+
+viewer1=project1.getViewer(0)
+camera1=viewer1.camera
+coordSystem1=project1.get(name="default_csys", type="CoordSystem")
+movableSlice1=project1.new(type="MovableSlice")
+scalarPropertySet5=project1.get(name="Static Pressure", type="ScalarPropertySet")
+movableSlice1.scalarPropertySet=scalarPropertySet5
+movableSlice1.orientationMode="X-Aligned"
+movableSlice1.position=( (0, -0.02, 0.006223), "m")
+movableSlice1.size=( (0.01247030859375, 0.04200525, 0), "m")
+movableSlice1.averagesAndIntegralsCalculate=True
+movableSlice1.averagesAndIntegralsSps=scalarPropertySet5
+movableSlice1.saveIntegralASCII(filename="Pressure.ascii")
+scalarPropertySet4=project1.get(name="Density", type="ScalarPropertySet")
+movableSlice1.averagesAndIntegralsSps=scalarPropertySet4
+movableSlice1.saveIntegralASCII(filename="Density.ascii")
+scalarPropertySet8=project1.get(name="Velocity Magnitude", type="ScalarPropertySet")
+scalarVariable18=project1.get(name="Mach Number", type="ScalarVariable")
+scalarPropertySet8.variable=scalarVariable18
+movableSlice1.averagesAndIntegralsSps=scalarPropertySet8
+movableSlice1.saveIntegralASCII(filename="MachNumber.ascii")
+# sign=UtdB/v9gDYyQOMreAi52bleHf7k0kHa4l/KeOU1dKq7ofGP8JdKvZdatQu2uJCGyivGYdASWQQCAjebXHT8MQqN0iHEeMeZ4XXgNoOQx0JHjo6z/QQPgK/SXVIXZ2atMvRpvQCE4pliJNwBP4J/r9lTnPszt8BCFkFy71F9aFZs=
