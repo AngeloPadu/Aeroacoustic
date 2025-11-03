@@ -11,7 +11,7 @@ class Comsol_lunch:
         
         # Scelta modello in base a uniformflow e slip
         if uniformflow and slip:
-            mph_path = '/home/apaduano/comsol_eduction/Impedance_bc/UFSC_channel_CFD_030_MF_LNSF_up_slip_ac.mph'
+            mph_path = '/media/angelo/int_hdd/PhD/04.COMSOL/3DGeometry/Comsol_6_2/145/up/Impedance_bc/UFSC_channel_CFD_030_MF_LNSF_up_slip_ac.mph'
         elif slip:
             mph_path = '/home/apaduano/comsol_eduction/Impedance_bc/UFSC_channel_CFD_030_BL_resolved_fine_up_noslip.mph'
         else:

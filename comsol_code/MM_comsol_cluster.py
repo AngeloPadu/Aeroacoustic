@@ -229,7 +229,7 @@ def costFunctionEduction(x,args,weight_real = 1):
     Z2 = np.inf
     zeta1 = 0
     zeta2 = 0
-    simPressure = comsol.lnsf_noslip(freq, Z1, uniformflow,slip)[0]
+    simPressure = comsol.lnsf_noslip(freq, Z1)[0]
     
     cost = np.zeros(int(len(pressure)))  # meglio usare len(pressure)
     tf_real = np.zeros(int(len(pressure)))
@@ -430,9 +430,9 @@ for k in range(len(locations)):
     
     parameters = [POA, cvt_height, fsheet_thick, orifice_d]
     Zinitial = computeImpedanceGuess(frequencies, SPL, rho, nu, c0, M, BLDT)
-    client = mph.start(cores=48)
+    client = mph.start(cores=8)
     client.caching(True)
-    comsol = comsol_interface.Comsol_lunch(client)
+    comsol = comsol_interface.Comsol_lunch(client,uniformflow,slip)
     log_event("Client COMSOL avviato.")
     
     
