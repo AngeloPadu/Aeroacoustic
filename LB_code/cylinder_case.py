@@ -10,20 +10,57 @@ Created on Thu Dec 11 15:54:15 2025
 import numpy as np
 import matplotlib.pyplot as plt
 from lbm_kernel import lbm_step_generic, compute_vorticity
+from geometry_creator import GeometryCreator
+# ==========================================
+# PARAMETRI FISICI
+# ==========================================
+nvx = 1                                                                        # nodi per R_m (risoluzione sul raggio)
+R_m = 0.001                                                                     # raggio cilindro [m]
+
+Cx = R_m / nvx                                                                  # [m per cella]
+    
+U_phys = 10.0                                                                   # [m/s]
+Lx = 0.5                                                                        # dominio x [m]
+Ly = 0.05                                                                        # dominio y [m]
+t_final = 0.025                                                                  # tempo simulazione [s]
+
 
 # ==========================================
-# PARAMETRI SIMULAZIONE
+# GEOMETRIA
 # ==========================================
-Nx = 200
-Ny = 100
-nt = 100000
+
+wall_y_bottom = 0
+wall_y_top = Ly
+
+# tripping sulla parete inferiore
+trip_x_start = 0.03                                                             # [m] da inlet
+trip_width   = 0.005                                                            # [m]
+trip_height  = 0.003                                                            # [m]
+
+# ==========================================
+# DOMINIO IN LATTICE
+# ==========================================
+Nx = int(Lx / Cx)                                                              # celle in x
+Ny = int(Ly / Cx)                                                              # celle in y
+
 
 U_in = 0.1
 rho0 = 1.0
-tau_base = 0.55
+
+U_in   = 0.1                                                                   # lattice, scelto per Mach basso
+
+Cu = U_phys / U_in
+Ct = Cx / Cu                                                                   # dt fisico per time step
+
+
+nu_phys = 1.5e-5                                                               # m^2/s
+nu_lat  = nu_phys / (Cu * Cx)
+tau_base = 0.5 + 3.0 * nu_lat
+
+nt = int(t_final/Ct)
 
 save_every = 500
-Nt_save = nt // save_every
+Nt_save = int(nt/save_every)
 
 # D2Q9
 c = np.array([[0,0], [1,0], [0,1], [-1,0], [0,-1],
@@ -38,6 +75,29 @@ w = np.array([4/9,
 
 opp = np.array([0,3,4,1,2,7,8,5,6], dtype=np.int64)
 
+
+
+# ==========================================
+# CONVERSIONE GEOMETRIA
+# ==========================================
+
+
+solid_mask = np.zeros((Ny, Nx), dtype=np.uint8)
+
+# istanzia con UN solo Cx
+geom = GeometryCreator(Cx)
+
+# pareti canale in metri
+geom.add_wall_y(solid_mask, y_m=wall_y_bottom)   # es. 0.0
+geom.add_wall_y(solid_mask, y_m=wall_y_top)      # es. Ly
+
+# tripping in metri
+geom.add_block(solid_mask,
+               x_start_m=trip_x_start,
+               width_m=trip_width,
+               height_m=trip_height,
+               bottom=True)
+
 # ==========================================
 # CAMPI
 # ==========================================
@@ -49,36 +109,6 @@ f     = np.zeros((Ny, Nx, 9), dtype=np.float64)
 f_new = np.zeros_like(f)
 for i in range(9):
     f[:,:,i] = w[i] * rho0
-
-# ==========================================
-# GEOMETRIA: cilindro interno + (opzionale) pareti
-# ==========================================
-cx_c = Nx // 5
-cy_c = Ny // 2
-R = 10
-
-Y, X = np.meshgrid(np.arange(Ny), np.arange(Nx), indexing='ij')
-cylinder = (X - cx_c)**2 + (Y - cy_c)**2 <= R**2
-
-solid_mask = np.zeros((Ny, Nx), dtype=np.uint8)
-solid_mask[cylinder] = 1
-
-# cy_c = Ny // 4
-
-# cylinder = (X - cx_c)**2 + (Y - cy_c)**2 <= R**2
-
-# solid_mask[cylinder] = 1
-
-# # se vuoi anche canale:
-# solid_mask[0, :]    = 1
-# solid_mask[Ny-1, :] = 1
-
-# # tripping: piccolo blocco sulla parete inferiore vicino all'inlet
-# trip_x_start = 10           # posizione in x (cella) dove inizia il trip
-# trip_width   = 10           # larghezza in celle
-# trip_height  = 8           # altezza in celle (quante celle verso l'interno del canale)
-
-# solid_mask[0:trip_height, trip_x_start:trip_x_start+trip_width] = 1
 
 # ==========================================
 # SPONGE: tau_eff(x,y) esponenziale ai bordi
@@ -142,7 +172,7 @@ for it in range(nt):
 # ==========================================
 # SALVATAGGIO SU DISCO
 # ==========================================
-np.savez("lbm_cylinder_data.npz",
+np.savez("../lbm_cylinder_data.npz",
          ux_hist=ux_hist,
          p_hist=p_hist,
          vort_hist=vort_hist,
@@ -157,7 +187,7 @@ print("Dati salvati su lbm_cylinder_data.npz")
 # POST-PROCESS: PLOT DOPO LA SIMULAZIONE
 # ==========================================
 # carica dati
-data = np.load("lbm_cylinder_data.npz")
+data = np.load("../lbm_cylinder_data.npz")
 ux_hist   = data["ux_hist"]
 p_hist    = data["p_hist"]
 vort_hist = data["vort_hist"]
