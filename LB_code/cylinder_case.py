@@ -16,13 +16,13 @@ import pyvista as pv
 # ==========================================
 # PARAMETRI FISICI
 # ==========================================
-nvx = 1                                                                        # nodi per R_m (risoluzione sul raggio)
-R_m = 0.01                                                                     # raggio cilindro [m]
+nvx = 10                                                                        # nodi per R_m (risoluzione sul raggio)
+R_m = 0.001                                                                     # raggio cilindro [m]
 
 Cx = R_m / nvx                                                                  # [m per cella]
     
 U_phys = 10.0                                                                   # [m/s]
-Lx = 2                                                                         # dominio x [m]
+Lx = 0.1                                                                        # dominio x [m]
 Ly = 0.05                                                                      # dominio y [m]
 t_final = 0.25                                                                 # tempo simulazione [s]
 
@@ -83,7 +83,8 @@ geom.add_block(solid_mask,
                x_start_m=trip_x_start,
                width_m=trip_width,
                height_m=trip_height,
-               bottom=True)
+               position='both')
+# geom.add_cylinder(solid_mask, Nx//5, Ny//2, R_m*10)
 
 # ==========================================
 # CAMPI
@@ -131,6 +132,10 @@ print(f"Inizio simulazione: Nx={Nx}, Ny={Ny}, nt={nt}, save_every={save_every}")
 # ==========================================
 # LOOP TEMPORALE
 # ==========================================
+x = np.linspace(0, (Nx-1)*Cx, Nx)
+y = np.linspace(0, (Ny-1)*Cx, Ny)
+X, Y = np.meshgrid(x, y, indexing='xy')   # shape (Ny, Nx)
+
 for it in range(nt):
     lbm_step_generic(f, f_new, rho, ux, uy,
                      cx_i, cy_i, w, opp,
@@ -140,102 +145,53 @@ for it in range(nt):
                      True,  Nx-1, rho0)
 
     f, f_new = f_new, f
+    
 
     if it % save_every == 0:
         p = rho - rho0
         vort = compute_vorticity(ux, uy)
 
-        # === CREA NUOVO GRID PER OGNI SNAPSHOT (CRUCIALE) ===
-        grid = pv.ImageData()
-        grid.dimensions = [Nx, Ny, 1]
-        grid.origin = [0, 0, 0]
-        grid.spacing = [Cx, Cx, 1.0]
+        # crei una surface strutturata (z=0)
+        points = np.c_[X.ravel(order='C'),
+                       Y.ravel(order='C'),
+                       np.zeros(X.size)]
+        grid = pv.StructuredGrid()
+        grid.points = points
+        grid.dimensions = [Nx, Ny, 1]  # per StructuredGrid è n_x, n_y, n_z di punti
         
-        # === ASSEGNA DATI CON flatten(order='F') ===
-        grid.point_data['ux'] = ux.flatten(order='F')
-        grid.point_data['uy'] = uy.flatten(order='F')
-        grid.point_data['pressure'] = p.flatten(order='F')
-        grid.point_data['vorticity'] = vort.flatten(order='F')
-        
-        # === AGGIUNGI AL MULTIBLOCK ===
-        multiblock.append(grid)
-        times.append(it * Ct)
-        
+        # campi (usa lo stesso ordine di ravel)
+        grid.point_data['ux']        = ux.ravel(order='C')
+        grid.point_data['uy']        = uy.ravel(order='C')
+        grid.point_data['pressure']  = p.ravel(order='C')
+        grid.point_data['vorticity'] = vort.ravel(order='C')
+
+        filename = f"lbm_{snap_id:04d}.vts"
+        grid.save(filename)
+        times.append(it*Ct)
+
         print(f"Saved snapshot {snap_id} at it={it}, t_phys={it*Ct:.4f}s")
+        
+        # if snap_id == 0:  # o scegli un indice
+        #     p = pv.Plotter()
+        #     p.add_mesh(grid, scalars='vorticity',
+        #                cmap='viridis',
+        #                show_edges=True)  # mostra la mesh
+        #     p.view_xy()
+        #     p.show()
+        
         snap_id += 1
 
 # ==========================================
 # SALVATAGGIO FINALE
 # ==========================================
-multiblock.save('lbm_simulation.vtm')
-print(f"✅ Salvato lbm_simulation.vtm con {len(times)} time steps!")
+print(f"Salvato lbm_simulation.vtm con {len(times)} time steps!")
 
 # ==========================================
 # VERIFICA DATI (opzionale)
 # ==========================================
 reader = pv.read('lbm_simulation.vtm')
-print("📊 Campi disponibili:", list(reader[0].point_data.keys()))
-print("⏱️  Numero time steps:", len(reader))
-print("✅ File pronto per ParaView!")
+print("Campi disponibili:", list(reader[0].point_data.keys()))
+print("Numero time steps:", len(reader))
+print("File pronto per ParaView!")
 
-#%%
-# ==========================================
-# POST-PROCESS: PLOT DOPO LA SIMULAZIONE
-# ==========================================
-# carica dati
-data = np.load("../lbm_cylinder_data.npz")
-ux_hist   = data["ux_hist"]
-p_hist    = data["p_hist"]
-vort_hist = data["vort_hist"]
-save_every = int(data["save_every"])
 
-Nt_save, Ny, Nx, _ = ux_hist.shape
-
-# figura iniziale
-fig, axes = plt.subplots(1, 3, figsize=(15,4))
-
-# inizializza con il primo snapshot
-k0 = 0
-ux_plot = ux_hist[k0, :, :, 0]
-uy_plot = ux_hist[k0, :, :, 1]
-vorticity = vort_hist[k0,:,:]
-p_plot  = p_hist[k0]
-
-im0 = axes[0].imshow(ux_plot, origin="lower", cmap="turbo",vmin=-0.005, vmax=0.2)
-axes[0].set_title(f"u_x, t={k0*save_every}")
-plt.colorbar(im0, ax=axes[0])
-
-umag_plot = np.sqrt(uy_plot)
-im1 = axes[1].imshow(umag_plot, origin="lower", cmap="bwr")
-axes[1].set_title(f"|u|, t={k0*save_every}")
-plt.colorbar(im1, ax=axes[1])
-
-im2 = axes[2].imshow(vorticity, origin="lower", cmap="bwr")
-axes[2].set_title(f"p, t={k0*save_every}")
-plt.colorbar(im2, ax=axes[2])
-
-plt.tight_layout()
-plt.pause(0.1)
-
-# loop di "animazione" offline
-for k in range(1, Nt_save):
-    ux_plot = ux_hist[k, :, :, 0]
-    uy_plot = ux_hist[k, :, :, 1]
-    vorticity  = vort_hist[k]
-    t_plot = k * save_every
-
-    umag_plot = np.sqrt(ux_plot**2+uy_plot**2)
-
-    im0.set_data(ux_plot)
-    im1.set_data(umag_plot)
-    im2.set_data(vorticity)
-
-    axes[0].set_title(f"u_x, t={t_plot}")
-    axes[1].set_title(f"|u|, t={t_plot}")
-    axes[2].set_title(f"vort_hist, t={t_plot}")
-    
-    
-    plt.pause(0.05)   # tempo tra frame
-    plt.draw()
-
-plt.show()
