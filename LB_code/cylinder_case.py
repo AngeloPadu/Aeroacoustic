@@ -11,24 +11,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 from lbm_kernel import lbm_step_generic, compute_vorticity
 from geometry_creator import GeometryCreator
+import pyvista as pv
+
 # ==========================================
 # PARAMETRI FISICI
 # ==========================================
 nvx = 1                                                                        # nodi per R_m (risoluzione sul raggio)
-R_m = 0.001                                                                     # raggio cilindro [m]
+R_m = 0.01                                                                     # raggio cilindro [m]
 
 Cx = R_m / nvx                                                                  # [m per cella]
     
 U_phys = 10.0                                                                   # [m/s]
-Lx = 0.5                                                                        # dominio x [m]
-Ly = 0.05                                                                        # dominio y [m]
-t_final = 0.025                                                                  # tempo simulazione [s]
-
+Lx = 2                                                                         # dominio x [m]
+Ly = 0.05                                                                      # dominio y [m]
+t_final = 0.25                                                                 # tempo simulazione [s]
 
 # ==========================================
 # GEOMETRIA
 # ==========================================
-
 wall_y_bottom = 0
 wall_y_top = Ly
 
@@ -43,15 +43,11 @@ trip_height  = 0.003                                                            
 Nx = int(Lx / Cx)                                                              # celle in x
 Ny = int(Ly / Cx)                                                              # celle in y
 
-
 U_in = 0.1
 rho0 = 1.0
 
-U_in   = 0.1                                                                   # lattice, scelto per Mach basso
-
 Cu = U_phys / U_in
 Ct = Cx / Cu                                                                   # dt fisico per time step
-
 
 nu_phys = 1.5e-5                                                               # m^2/s
 nu_lat  = nu_phys / (Cu * Cx)
@@ -59,7 +55,7 @@ tau_base = 0.5 + 3.0 * nu_lat
 
 nt = int(t_final/Ct)
 
-save_every = 500
+save_every = 100  # Modificato da 500 per più frame
 Nt_save = int(nt/save_every)
 
 # D2Q9
@@ -75,23 +71,14 @@ w = np.array([4/9,
 
 opp = np.array([0,3,4,1,2,7,8,5,6], dtype=np.int64)
 
-
-
 # ==========================================
 # CONVERSIONE GEOMETRIA
 # ==========================================
-
-
 solid_mask = np.zeros((Ny, Nx), dtype=np.uint8)
-
-# istanzia con UN solo Cx
 geom = GeometryCreator(Cx)
 
-# pareti canale in metri
-geom.add_wall_y(solid_mask, y_m=wall_y_bottom)   # es. 0.0
-geom.add_wall_y(solid_mask, y_m=wall_y_top)      # es. Ly
-
-# tripping in metri
+geom.add_wall_y(solid_mask, y_m=wall_y_bottom)
+geom.add_wall_y(solid_mask, y_m=wall_y_top)
 geom.add_block(solid_mask,
                x_start_m=trip_x_start,
                width_m=trip_width,
@@ -133,13 +120,13 @@ for j in range(Ny):
 omega_eff = 1.0 / tau_eff
 
 # ==========================================
-# ARRAY PER SALVARE I CAMPI NEL TEMPO
+# INIZIALIZZAZIONE PyVista MULTIBLOCK
 # ==========================================
-ux_hist   = np.zeros((Nt_save, Ny, Nx, 2), dtype=np.float64)
-p_hist    = np.zeros((Nt_save, Ny, Nx), dtype=np.float64)
-vort_hist = np.zeros((Nt_save, Ny, Nx), dtype=np.float64)
-
+multiblock = pv.MultiBlock()
+times = []
 snap_id = 0
+
+print(f"Inizio simulazione: Nx={Nx}, Ny={Ny}, nt={nt}, save_every={save_every}")
 
 # ==========================================
 # LOOP TEMPORALE
@@ -149,38 +136,47 @@ for it in range(nt):
                      cx_i, cy_i, w, opp,
                      omega_eff,
                      solid_mask,
-                     # inlet: velocità a sinistra (colonna 0)
                      True,  0,    U_in, rho0,
-                     # outlet: pressione fissata a destra (colonna Nx-1)
                      True,  Nx-1, rho0)
 
-    # ping-pong
     f, f_new = f_new, f
 
     if it % save_every == 0:
         p = rho - rho0
         vort = compute_vorticity(ux, uy)
 
-        ux_hist[snap_id, :, :, 0] = ux
-        ux_hist[snap_id, :, :, 1] = uy
-        p_hist[snap_id]    = p
-        vort_hist[snap_id,:,:] = vort
-
-        print(f"Saved snapshot {snap_id} at it={it}")
+        # === CREA NUOVO GRID PER OGNI SNAPSHOT (CRUCIALE) ===
+        grid = pv.ImageData()
+        grid.dimensions = [Nx, Ny, 1]
+        grid.origin = [0, 0, 0]
+        grid.spacing = [Cx, Cx, 1.0]
+        
+        # === ASSEGNA DATI CON flatten(order='F') ===
+        grid.point_data['ux'] = ux.flatten(order='F')
+        grid.point_data['uy'] = uy.flatten(order='F')
+        grid.point_data['pressure'] = p.flatten(order='F')
+        grid.point_data['vorticity'] = vort.flatten(order='F')
+        
+        # === AGGIUNGI AL MULTIBLOCK ===
+        multiblock.append(grid)
+        times.append(it * Ct)
+        
+        print(f"Saved snapshot {snap_id} at it={it}, t_phys={it*Ct:.4f}s")
         snap_id += 1
 
 # ==========================================
-# SALVATAGGIO SU DISCO
+# SALVATAGGIO FINALE
 # ==========================================
-np.savez("../lbm_cylinder_data.npz",
-         ux_hist=ux_hist,
-         p_hist=p_hist,
-         vort_hist=vort_hist,
-         save_every=save_every,
-         Nx=Nx, Ny=Ny, nt=nt)
+multiblock.save('lbm_simulation.vtm')
+print(f"✅ Salvato lbm_simulation.vtm con {len(times)} time steps!")
 
-print("Dati salvati su lbm_cylinder_data.npz")
-
+# ==========================================
+# VERIFICA DATI (opzionale)
+# ==========================================
+reader = pv.read('lbm_simulation.vtm')
+print("📊 Campi disponibili:", list(reader[0].point_data.keys()))
+print("⏱️  Numero time steps:", len(reader))
+print("✅ File pronto per ParaView!")
 
 #%%
 # ==========================================
