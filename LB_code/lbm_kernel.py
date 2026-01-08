@@ -44,17 +44,25 @@ def lbm_step_generic(f, f_new, rho, ux, uy,
 
     Ny, Nx = rho.shape
 
-    # ---- COLLISIONE con tau_eff ----
+    # ---- COLLISIONE CRANK-NICOLSON ----
     for j in prange(Ny):
         for i in range(Nx):
             if solid_mask[j,i] == 1:
-                continue  # celle solide gestite da bounce-back
+                continue
             u2 = ux[j,i]*ux[j,i] + uy[j,i]*uy[j,i]
-            om = omega_eff[j,i]
+            tau = 1.0 / omega_eff[j,i]   # tau_eff locale
+            omega_CN = (1.0/tau) / (1.0 + 0.5*tau)
+            
             for k in range(9):
                 cu = cx_i[k]*ux[j,i] + cy_i[k]*uy[j,i]
-                feq = w[k]*rho[j,i]*(1.0 + 3.0*cu + 4.5*cu*cu - 1.5*u2)
-                f[j,i,k] += -om * (f[j,i,k] - feq)
+                feq_n = w[k]*rho[j,i]*(1.0 + 3.0*cu + 4.5*cu*cu - 1.5*u2)
+                
+                # f_tilde = f^n + (1/(2*tau)) * (feq_n - f^n)
+                f_tilde = f[j,i,k] + 0.5/tau * (feq_n - f[j,i,k])
+                
+                # collisione BGK su f_tilde verso feq_n (o feq^{n+1}, differenza O(Δt^2))
+                f[j,i,k] = f_tilde - omega_CN * (f_tilde - feq_n)
+
 
     # ---- STREAMING: f -> f_new ----
     for k in range(9):
