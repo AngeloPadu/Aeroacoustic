@@ -22,128 +22,155 @@ def compute_vorticity(ux, uy):
 # Kernel generico LBM D2Q9 con tau_eff(x,y), solid_mask, inlet/outlet
 # ------------------------------------------------
 @njit(parallel=True)
-def lbm_step_generic(f, f_new, rho, ux, uy,
-                     cx_i, cy_i, w, opp,
-                     omega_eff,
-                     solid_mask,
-                     # inlet options
-                     use_inlet, i_in, U_in, rho_in,
-                     # outlet options
-                     use_outlet, i_out, rho_out):
-    """
-    f, f_new : (Ny, Nx, 9) distribuzioni
-    rho, ux, uy : (Ny, Nx)
-    cx_i, cy_i : (9,)
-    w : (9,)
-    opp : (9,) indici opposti
-    omega_eff : (Ny, Nx) collision frequency locale
-    solid_mask : (Ny, Nx) uint8, 1 = solido, 0 = fluido
-    inlet: se use_inlet=True, impone velocità (U_in,0) su colonna i_in con densità rho_in
-    outlet: se use_outlet=True, impone densità rho_out su colonna i_out con u ricavata da colonna interna
-    """
+def lbm_step_modular(
+    f, f_new, rho, ux, uy,
+    cx_i, cy_i, w, opp,
+    omega_eff,
+    solid_mask,
 
+    # --- inlet ---
+    bc_in_type, i_in, U_in, rho_in,
+
+    # --- outlet ---
+    bc_out_type, i_out, rho_out,
+
+    # --- periodic flags ---
+    periodic_x, use_forcing, Fx, Fy
+):
     Ny, Nx = rho.shape
 
-    # ---- COLLISIONE CRANK-NICOLSON ----
+    # ==================================================
+    # 1. COLLISIONE (Crank–Nicolson BGK)
+    # ==================================================
     for j in prange(Ny):
         for i in range(Nx):
-            if solid_mask[j,i] == 1:
+            if solid_mask[j,i]:
                 continue
-            u2 = ux[j,i]*ux[j,i] + uy[j,i]*uy[j,i]
-            tau = 1.0 / omega_eff[j,i]   # tau_eff locale
+
+            u2 = ux[j,i]**2 + uy[j,i]**2
+            tau = 1.0 / omega_eff[j,i]
             omega_CN = (1.0/tau) / (1.0 + 0.5*tau)
-            
+
             for k in range(9):
                 cu = cx_i[k]*ux[j,i] + cy_i[k]*uy[j,i]
-                feq_n = w[k]*rho[j,i]*(1.0 + 3.0*cu + 4.5*cu*cu - 1.5*u2)
+                feq = w[k]*rho[j,i] * (
+                    1.0 + 3.0*cu + 4.5*cu*cu - 1.5*u2
+                )
+                Fk = 0.0
+                if use_forcing:
+                    cu = cx_i[k]*ux[j,i] + cy_i[k]*uy[j,i]
+                    cF = cx_i[k]*Fx + cy_i[k]*Fy
+                    uF = ux[j,i]*Fx + uy[j,i]*Fy
                 
-                # f_tilde = f^n + (1/(2*tau)) * (feq_n - f^n)
-                f_tilde = f[j,i,k] + 0.5/tau * (feq_n - f[j,i,k])
+                    Fk = w[k] * (1.0 - 0.5/tau) * (
+                          3.0 * cF
+                        + 9.0 * cu * cF
+                        - 3.0 * uF
+                    )
+
+                # pre-collisione CN
+                f_tilde = f[j,i,k] + 0.5/tau * (feq - f[j,i,k]) + 0.5 * Fk
                 
-                # collisione BGK su f_tilde verso feq_n (o feq^{n+1}, differenza O(Δt^2))
-                f[j,i,k] = f_tilde - omega_CN * (f_tilde - feq_n)
+                # collisione
+                f[j,i,k] = f_tilde - omega_CN * (f_tilde - feq) + 0.5 * Fk
 
-
-    # ---- STREAMING: f -> f_new ----
+    # ==================================================
+    # 2. STREAMING
+    # ==================================================
     for k in range(9):
         cx = cx_i[k]
         cy = cy_i[k]
+        k_opp = opp[k]
+
         for j in prange(Ny):
-            j_src = (j - cy) % Ny
             for i in range(Nx):
-                i_src = (i - cx) % Nx
-                f_new[j,i,k] = f[j_src,i_src,k]
 
-    # ---- BOUNCE-BACK per tutte le celle solide ----
-    for j in prange(Ny):
-        for i in range(Nx):
-            if solid_mask[j,i] == 1:
-                for k in range(9):
-                    f_new[j,i,k] = f_new[j,i,opp[k]]
+                j_src = j - cy
+                i_src = i - cx
 
-    # ---- INLET: velocità imposta (opzionale) ----
-    if use_inlet:
+                # periodicità x
+                if periodic_x:
+                    i_src %= Nx
+
+                # fuori dominio y
+                if j_src < 0 or j_src >= Ny:
+                    f_new[j,i,k] = f[j,i,k_opp]
+                    continue
+
+                # fuori dominio x (open)
+                if not periodic_x and (i_src < 0 or i_src >= Nx):
+                    continue
+
+                # bounce-back su solido
+                if solid_mask[j_src, i_src]:
+                    f_new[j,i,k] = f[j,i,k_opp]
+                else:
+                    f_new[j,i,k] = f[j_src, i_src, k]
+
+    # ==================================================
+    # 3. INLET BC
+    # ==================================================
+    if bc_in_type == 1:  # ZOU–HE velocity
         ii = i_in
         for j in prange(Ny):
-            if solid_mask[j,ii] == 1:
+            if solid_mask[j,ii]:
                 continue
-            rho[j,ii] = rho_in
-            ux[j,ii]  = U_in
-            uy[j,ii]  = 0.0
-            u2_in = ux[j,ii]*ux[j,ii] + uy[j,ii]*uy[j,ii]
-            for k in range(9):
-                cu = cx_i[k]*ux[j,ii] + cy_i[k]*uy[j,ii]
-                f_new[j,ii,k] = w[k]*rho[j,ii]*(1.0 + 3.0*cu + 4.5*cu*cu - 1.5*u2_in)
 
-    # ---- OUTLET: pressione fissata rho_out (opzionale) ----
-    if use_outlet:
+            f0 = f_new[j,ii,0]
+            f1 = f_new[j,ii,1]
+            f2 = f_new[j,ii,2]
+            f4 = f_new[j,ii,4]
+            f5 = f_new[j,ii,5]
+            f8 = f_new[j,ii,8]
+
+            rho_loc = (f0 + f2 + f4 + 2.0*(f1 + f5 + f8)) / (1.0 - U_in)
+
+            f_new[j,ii,3] = f1 - 2.0/3.0 * rho_loc * U_in
+            f_new[j,ii,6] = f5 + 1.0/6.0 * rho_loc * U_in
+            f_new[j,ii,7] = f8 + 1.0/6.0 * rho_loc * U_in
+
+    # ==================================================
+    # 4. OUTLET BC
+    # ==================================================
+    if bc_out_type == 2:  # CONVECTIVE / zero-gradient
         io = i_out
-        i_int = io - 1 if io > 0 else io + 1  # colonna interna adiacente
+        i_int = io - 1
+
         for j in prange(Ny):
-            if solid_mask[j,io] == 1:
+            if solid_mask[j,io]:
                 continue
-            # macro sulla colonna interna i_int
-            s = 0.0
-            sx = 0.0
-            sy = 0.0
-            for k in range(9):
-                fi = f_new[j,i_int,k]
-                s  += fi
-                sx += fi * cx_i[k]
-                sy += fi * cy_i[k]
-            if s < 1e-12:
-                s = 1e-12
-            ux_int = sx / s
-            uy_int = sy / s
 
-            u2_out = ux_int*ux_int + uy_int*uy_int
-            rho[j,io] = rho_out
-            ux[j,io]  = ux_int
-            uy[j,io]  = uy_int
             for k in range(9):
-                cu = cx_i[k]*ux_int + cy_i[k]*uy_int
-                f_new[j,io,k] = w[k]*rho_out*(1.0 + 3.0*cu + 4.5*cu*cu - 1.5*u2_out)
+                f_new[j,io,k] = f_new[j,i_int,k]
 
-    # ---- MACRO GLOBALI da f_new ----
+    # ==================================================
+    # 5. MACROSCOPICHE
+    # ==================================================
     for j in prange(Ny):
         for i in range(Nx):
+
             s = 0.0
             sx = 0.0
             sy = 0.0
+
             for k in range(9):
                 fi = f_new[j,i,k]
                 s  += fi
                 sx += fi * cx_i[k]
                 sy += fi * cy_i[k]
+
             if s < 1e-12:
                 s = 1e-12
+
             rho[j,i] = s
             ux[j,i]  = sx / s
             uy[j,i]  = sy / s
 
-    # ---- NO-SLIP automatico sulle celle solide ----
+    # ==================================================
+    # 6. NO-SLIP SOLIDI
+    # ==================================================
     for j in prange(Ny):
         for i in range(Nx):
-            if solid_mask[j,i] == 1:
+            if solid_mask[j,i]:
                 ux[j,i] = 0.0
                 uy[j,i] = 0.0
