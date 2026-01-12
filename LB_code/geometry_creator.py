@@ -13,7 +13,7 @@ class GeometryCreator:
         j = max(0, min(Ny-1, j))
         solid_mask[j, :] = 1
 
-    def add_block(self, solid_mask, x_start_m, width_m, height_m, position="bottom"):
+    def add_block(self, solid_mask, x_start_m, width_m, height_m, tripper, position="bottom"):
         Ny, Nx = solid_mask.shape
     
         i0 = self.m2i(x_start_m)
@@ -24,16 +24,38 @@ class GeometryCreator:
         i1 = max(0, min(Nx, i0 + iw))
     
         # bottom
+        
+            
         if position in ("bottom", "both"):
             j0 = 0
             j1 = max(0, min(Ny, ih))
-            solid_mask[j0:j1, i0:i1] = 1
+            
+            if tripper == "triangle":
+                Y, X = np.meshgrid(np.arange(Ny), np.arange(Nx), indexing='ij')
+
+                triangle = (Y <= ih - (2*ih/iw) * np.abs((X+iw) - i0))
+                    
+                solid_mask[triangle] = 1
+                
+                triangle = (Y >= (np.max(Y)-ih) + (2*ih/iw) * np.abs((X+iw) - i0))
+                    
+                solid_mask[triangle] = 1
+
+            else:
+                solid_mask[j0:j1, i0:i1] = 1
     
         # top
         if position in ("top", "both"):
             j0 = max(0, Ny - ih)
             j1 = Ny
-            solid_mask[j0:j1, i0:i1] = 1
+            
+            if tripper == "triangle":
+                
+                Y, X = np.meshgrid(np.arange(Ny), np.arange(Nx), indexing='ij')
+                triangle = ((X-j1)-(X-j0))*(Y-i1)
+                    
+            else: 
+                solid_mask[j0:j1, i0:i1] = 1
 
     
     def add_cylinder(self,solid_mask,center_x,center_y,radius):
