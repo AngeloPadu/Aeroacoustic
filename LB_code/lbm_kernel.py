@@ -84,31 +84,68 @@ def lbm_step_modular(
             # (B) 2nd order CN via transformed population g (UAS)
             # -------------------------
             elif collision_operator == 1:
-                # CNBGK (UAS) with transformed population g
-                omega_tilde = 1.0 / (tau-0.5)  # = omega / (1 + 0.5*omega)
+                # ------------------------------------------------------------
+                # Fix B: CN via transformed populations, but using tau_pde = tau_lbm - 1/2
+                # so the +1/2 shift is NOT applied twice.
+                #
+                # Inputs you already have:
+                #   omega_eff[j,i] is omega_lbm = 1/tau_lbm
+                #   tau_lbm = 1/omega_lbm
+                #
+                # Define:
+                #   tau_pde = tau_lbm - 0.5
+                #   omega_pde = 1/tau_pde
+                #
+                # CN relaxation factor:
+                #   omega_tilde = 1/(tau_pde + 0.5) = 1/tau_lbm = omega_lbm
+                # ------------------------------------------------------------
             
-                for k in range(9):
-                    cu = cx_i[k]*ux_n + cy_i[k]*uy_n
-                    feq_n = w[k]*rho_n*(1.0 + 3.0*cu + 4.5*cu*cu - 1.5*u2_n)
+                omega_lbm = omega_eff[j, i]          # = 1/tau_lbm
+                tau_lbm   = 1.0 / omega_lbm
             
-                    Fk_n = 0.0
-                    if use_forcing:
-                        cF = cx_i[k]*Fx + cy_i[k]*Fy
-                        uF = ux_n*Fx + uy_n*Fy
-                        Fk_n = w[k] * (3.0*cF + 9.0*cu*cF - 3.0*uF)
+                # tau_pde must be > 0
+                tau_pde = tau_lbm - 0.5
+                if tau_pde <= 1e-15:
+                    # Degenerate/invalid (tau_lbm <= 0.5): fall back to plain BGK update
+                    for k in range(9):
+                        cu = cx_i[k]*ux_n + cy_i[k]*uy_n
+                        feq = w[k]*rho_n*(1.0 + 3.0*cu + 4.5*cu*cu - 1.5*u2_n)
             
-
-                    # 1) Transform f -> g (HSD Eq. 15, UAS Eq. 6)
-                    # Nota: HSD usa h, UAS usa f_tilde. La logica è identica.
-                    g = f[j, i, k] + 0.5 * (omega_tilde) * (f[j, i, k] - feq_n) - 0.5 *Fk_n
-                    
-                    # 2) Collide on g (Evolution equation, HSD Eq. 16, UAS Eq. 7)
-                    # L'evoluzione è un rilassamento verso l'equilibrio con il forcing pesato
-                    g = g - omega * (g - feq_n) + (tau * omega) * Fk_n
-                    
-                    # 3) Back-transform g -> f (UAS Eq. 8 invertita con forcing HSD)
-                    # CORREZIONE: Il segno di feq_n deve essere POSITIVO
-                    f[j, i, k] = (g + 0.5 * omega_tilde * feq_n + 0.5 * Fk_n) / (1.0 + 0.5 * omega)
+                        Fk = 0.0
+                        if use_forcing:
+                            cF = cx_i[k]*Fx + cy_i[k]*Fy
+                            uF = ux_n*Fx + uy_n*Fy
+                            Fk = w[k] * (3.0*cF + 9.0*cu*cF - 3.0*uF)
+            
+                        f[j, i, k] = f[j, i, k] - omega_lbm*(f[j, i, k] - feq) + (1.0 - 0.5*omega_lbm)*Fk
+                else:
+                    omega_pde   = 1.0 / tau_pde
+                    invA        = 1.0 / (1.0 + 0.5*omega_pde)   # A = 1 + 0.5*omega_pde
+            
+                    # CN factor (this equals omega_lbm)
+                    omega_tilde = 1.0 / (tau_pde + 0.5)          # = 1/tau_lbm = omega_lbm
+            
+                    # forcing weight in g-evolution (equivalent to 1 - 0.5*omega_tilde)
+                    force_pref  = tau_pde * omega_tilde          # = tau_pde/(tau_pde+0.5)
+            
+                    for k in range(9):
+                        cu = cx_i[k]*ux_n + cy_i[k]*uy_n
+                        feq_n = w[k]*rho_n*(1.0 + 3.0*cu + 4.5*cu*cu - 1.5*u2_n)
+            
+                        Fk_n = 0.0
+                        if use_forcing:
+                            cF = cx_i[k]*Fx + cy_i[k]*Fy
+                            uF = ux_n*Fx + uy_n*Fy
+                            Fk_n = w[k] * (3.0*cF + 9.0*cu*cF - 3.0*uF)
+            
+                        # 1) Transform f -> g using omega_pde (NOT omega_lbm)
+                        g = f[j, i, k] + 0.5*omega_pde*(f[j, i, k] - feq_n) - 0.5*Fk_n
+            
+                        # 2) Collide in g with omega_tilde
+                        g = g - omega_tilde*(g - feq_n) + force_pref*Fk_n
+            
+                        # 3) Back-transform g -> f (same omega_pde and same A)
+                        f[j, i, k] = (g + 0.5*omega_pde*feq_n + 0.5*Fk_n) * invA
 
             # -------------------------
             # (C) Regularized BGK (RLBM) - Per stabilità High-Re
