@@ -414,6 +414,46 @@ def _enforce_no_slip(ux, uy, solid_mask):
 
 
 # ------------------------------------------------
+# 7) Acoustic Wave BC
+# ------------------------------------------------
+@njit(inline="always")
+def _source_pop(wk, cx, cy, amp, src_nx, src_ny, cs):
+    # Eq. (40) from Toutant & Sagaut:
+    # g_as_k = w_k * (1 + (c_k·n)/c_s) * amp
+    # For their tube source, n = e_x = (1, 0)
+    cdotn = cx * src_nx + cy * src_ny
+    return wk * (1.0 + cdotn / cs) * amp
+
+
+@njit(parallel=True)
+def _local_source(
+    f,
+    solid_mask,
+    source_mask,   # bool[Ny, Nx], True where source is active
+    cx_i,
+    cy_i,
+    w,
+    source_amp,    # epsilon * sin(omega * t), already computed by caller
+    src_nx,        # usually 1.0
+    src_ny,        # usually 0.0
+    cs,            # usually 1/sqrt(3) in lattice units
+):
+    Ny, Nx = solid_mask.shape
+
+    for j in prange(Ny):
+        for i in range(Nx):
+            if solid_mask[j, i]:
+                continue
+            if not source_mask[j, i]:
+                continue
+
+            for k in range(9):
+                f[j, i, k] += _source_pop(
+                    w[k], cx_i[k], cy_i[k],
+                    source_amp, src_nx, src_ny, cs
+                )
+
+# ------------------------------------------------
 # Main wrapper (same signature as the original)
 # ------------------------------------------------
 @njit
@@ -446,6 +486,13 @@ def lbm_step_modular(
     periodic_y,
     collision_operator,
     lambda_trt,
+    # -- acoustic source ----
+    use_source,
+    source_mask,
+    source_amp,
+    src_nx,
+    src_ny,
+    cs,
 ):
     """One LBM time-step (D2Q9).
 
@@ -462,6 +509,12 @@ def lbm_step_modular(
         _collision_cn_uas(f, rho, ux, uy, cx_i, cy_i, w, omega_eff, solid_mask, use_forcing, Fx, Fy)
     else:
         _collision_trt(f, rho, ux, uy, cx_i, cy_i, w, omega_eff, solid_mask, use_forcing, Fx, Fy, lambda_trt)
+
+    if use_source:
+        _local_source(
+            f, solid_mask, source_mask, cx_i, cy_i, w,
+            source_amp, src_nx, src_ny, cs
+        )
 
     # 2) streaming
     _streaming_pull(f, f_new, cx_i, cy_i, opp, solid_mask, periodic_x, periodic_y)
