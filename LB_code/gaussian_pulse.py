@@ -100,7 +100,7 @@ def initialize_local_plane_wave_with_flow(rho, ux, uy, rho0, A, k,
 # =============================================================================
 # SIMULATION PARAMETERS
 # =============================================================================
-Nx, Ny = 100000, 160       # domain size
+Nx, Ny = 20000, 80       # domain size
 rho0 = 1.0
 tau = 0.55              # relaxation time
 omega = 1.0 / tau
@@ -110,6 +110,10 @@ A = 1e-1               # amplitude (must be small)
 sigma = 8.0            # width of pulse
 x0 = Nx // 2
 y0 = Ny // 2
+
+
+sponge = True
+Length_sponge = 5000
 
 # =============================================================================
 # ARRAYS
@@ -127,7 +131,11 @@ solid_mask[0, :]  = 1
 solid_mask[-1, :] = 1
 
 source_mask = np.zeros((Ny, Nx), dtype=np.bool_)
-source_mask[:, 0] = True
+if sponge:
+    source_mask[:, Length_sponge] = True
+else:
+    source_mask[:, 0] = True
+
 eps = A
 omega_src = (2*np.pi)/1400
 
@@ -144,37 +152,38 @@ omega_src = (2*np.pi)/1400
 # =============================================================================
 # SPONGE
 # =============================================================================
-sponge = True
-Length_sponge = 3000
 if sponge:
     sponge_width = int(Length_sponge)*2/3
     tau_sponge = 4
     alpha = 0.0045
+    
 
     tau_eff = tau * np.ones((Ny, Nx), dtype=np.float64)
     
     f_r0 = (np.exp(alpha*(Nx-sponge_width))/np.exp(alpha*(Nx-int(Length_sponge)*1/3)))
-    
+    f_l0 = (np.exp(-alpha*(sponge_width))/np.exp(-alpha*(int(Length_sponge)*1/3)))
+
     for j in range(Ny):
         for i in range(Nx):
-            #dx_left = max(0, sponge_width - i)
-            dx_right = max(0, sponge_width - (Nx - 1 - i))
+           
+            f_l = (np.exp(-alpha*i)/np.exp(-alpha*(int(Length_sponge)*1/3)))
+            f_r = (np.exp(alpha*i)/np.exp(alpha*(Nx-int(Length_sponge)*1/3)))
+            tau_eff[j, i] = tau + (tau_sponge) * (f_r-f_r0) + (tau_sponge) * (f_l-f_l0)
+            
 
-            # dy_bottom = max(0, sponge_width - j)
-            # dy_top    = max(0, sponge_width - (Ny-1 - j))
-
-            d =  dx_right
-            if d > 0:
-                r = d / sponge_width
-                f_r = (np.exp(alpha*i)/np.exp(alpha*(Nx-int(Length_sponge)*1/3)))
-                tau_eff[j, i] = tau + (tau_sponge) * (f_r-f_r0)
-    
     for j in range(Ny):
         for i in range(Nx):
             dx_right = max(0, (Length_sponge-sponge_width) - (Nx - 1 - i))
             d =  dx_right
             
             if d > 0:
+                tau_eff[j, i] = tau_sponge + tau
+                
+    for j in range(Ny):
+        for i in range(Nx):
+            dx_left = max(0, (Length_sponge-sponge_width) -  i)
+            
+            if dx_left > 0:
                 tau_eff[j, i] = tau_sponge + tau
                     
     plt.plot(np.linspace(0,Nx,Nx),tau_eff[int(Ny/2),:])   
@@ -240,7 +249,7 @@ for it in range(nsteps):
         omega_eff,
         solid_mask,
         0, 0, 0.0, 1.0,
-        0, 0, 1.0,
+        0, 0, 2.0,
         True, False, 0.0, 0.0, False,   # periodic_x=True, periodic_y=False
         collision_operator=0,
         lambda_trt=3/16,
@@ -299,11 +308,11 @@ print("Attenuation coefficient alpha:", alpha)
 
 # =============================================================================
 #%%
-# plt.contourf(X,Y,rho,
-# cmap="RdBu_r",  # Colormap più contrastata
-#         levels=20,vmin=0.9,vmax=1.1,    # Meno livelli per aumentare il contrasto
-#         extend="max")# Normalizzazione
-# plt.show()
+plt.contourf(X,Y,rho,
+cmap="RdBu_r",  # Colormap più contrastata
+        levels=20,vmin=0.9,vmax=1.1,    # Meno livelli per aumentare il contrasto
+        extend="max")# Normalizzazione
+plt.show()
 
 plt.plot(np.linspace(0,nsteps,nsteps),np.asarray(rho_point)[:])
 plt.plot(np.linspace(0,nsteps,nsteps),np.asarray(src_pt))
